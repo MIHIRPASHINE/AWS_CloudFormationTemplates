@@ -1,0 +1,157 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A sample template to create webserver infrastructure.
+Resources:
+  IBMVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 192.168.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+       - Key: Name
+         Value: IBM-VPC
+
+  IBMInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: IBM-IGW
+
+  IBMAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+         Ref: IBMVPC
+      InternetGatewayId:
+         Ref: IBMInternetGateway 
+
+  IBMPUBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: IBMVPC
+      CidrBlock: 192.168.0.0/24
+      AvailabilityZone: "us-east-1a"
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: IBM-PUB-SUBNET 
+
+  IBMPVTSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: IBMVPC
+      CidrBlock: 192.168.1.0/24
+      AvailabilityZone: "us-east-1b"
+      Tags:
+      - Key: Name
+        Value: IBM-PVT-SUBNET        
+
+  IBMPUBRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: IBMVPC
+      Tags:
+      - Key: Name
+        Value: IBM-PUB-RT
+
+  IBMPVTRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: IBMVPC
+      Tags:
+      - Key: Name
+        Value: IBM-PVT-RT      
+
+  IBMPUBSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: IBMPUBSubnet
+      RouteTableId:
+        Ref: IBMPUBRouteTable
+
+  IBMPVTSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: IBMPVTSubnet
+      RouteTableId:
+        Ref: IBMPVTRouteTable      
+  
+  IBMRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IBMAttachGateway
+    Properties:
+       RouteTableId:
+         Ref: IBMPUBRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: IBMInternetGateway
+
+  IBMSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH and HTTP incoming req from www to the instance/server
+      VpcId: !Ref IBMVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp           
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0 
+      Tags: 
+      - Key: Name
+        Value: IBM-SEC-GRP    #here egress rules are not addedd,therefore allow outbound traffic to all ports will be added by default. 
+  
+  IBMPUBInstance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-05548f9cecf47b442"
+      KeyName: "nvirgkeypair"
+      BlockDeviceMappings: 
+      - DeviceName: "/dev/sdm"
+        Ebs: 
+          VolumeType: "gp3"    #additional ebs #root storage will automatically be assigned that is mapped with ami.
+          Iops: "3000"
+          DeleteOnTermination: "true"
+          VolumeSize: "11"
+      - DeviceName: "/dev/sdk"
+        NoDevice: {}
+      SubnetId: !Ref IBMPUBSubnet
+      SecurityGroupIds: 
+         - !Ref IBMSecurityGroup
+      AvailabilityZone: us-east-1a
+      InstanceType: t2.micro
+      UserData: 
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo yum -y install httpd
+          sudo yum -y install git
+          sudo systemctl start httpd
+          sudo systemctl enable httpd
+          sudo git clone https://github.com/Ai-TechNov/ecomm.git /var/www/html
+      Tags: 
+      - Key: Name
+        Value: IBM-PUB-SERVER 
+
+  IBMPVTInstance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-05548f9cecf47b442"  #here, add ebs is not attached.
+      KeyName: "nvirgkeypair"
+      SubnetId: !Ref IBMPVTSubnet
+      SecurityGroupIds: 
+         - !Ref IBMSecurityGroup
+      AvailabilityZone: us-east-1b
+      InstanceType: t2.micro
+      Tags: 
+      - Key: Name
+        Value: IBM-PVT-SERVER              
