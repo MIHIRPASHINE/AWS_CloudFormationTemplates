@@ -1,0 +1,289 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A sample template to create VPC-Peering infrastructure for Practice.
+Resources:
+  IBMVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+       - Key: Name
+         Value: IBM-VPC
+
+  IBMInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: IBM-IGW
+
+  IBMAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+         Ref: IBMVPC
+      InternetGatewayId:
+         Ref: IBMInternetGateway 
+
+  IBMPUBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: IBMVPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: "us-east-1a"
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: IBM-PUB-SUBNET 
+
+  IBMPVTSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: IBMVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: "us-east-1b"
+      Tags:
+      - Key: Name
+        Value: IBM-PVT-SUBNET        
+
+  IBMPUBRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: IBMVPC
+      Tags:
+      - Key: Name
+        Value: IBM-PUB-RT
+
+  IBMPVTRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: IBMVPC
+      Tags:
+      - Key: Name
+        Value: IBM-PVT-RT      
+
+  IBMPUBSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: IBMPUBSubnet
+      RouteTableId:
+        Ref: IBMPUBRouteTable
+
+  IBMPVTSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: IBMPVTSubnet
+      RouteTableId:
+        Ref: IBMPVTRouteTable      
+  
+  IBMRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IBMAttachGateway
+    Properties:
+       RouteTableId:
+         Ref: IBMPUBRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: IBMInternetGateway
+
+  IBMSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH incoming req from www to the instance/server
+      VpcId: !Ref IBMVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp           
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:                   
+      - Key: Name   
+        Value: IBM-SEC-GRP  #here egress rules are not addedd,therefore allow outbound traffic to all ports will be added by default. 
+  
+  IBMPUBInstance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-05548f9cecf47b442"
+      KeyName: "nvirgkeypair"
+      BlockDeviceMappings: 
+      - DeviceName: "/dev/sdm"
+        Ebs: 
+          VolumeType: "gp3"    #additional ebs of 9gb.
+          Iops: "3000"         #root storage will automatically be assigned that is mapped with ami.
+          DeleteOnTermination: "true"
+          VolumeSize: "9"
+      - DeviceName: "/dev/sdk"
+        NoDevice: {}
+      SubnetId: !Ref IBMPUBSubnet
+      SecurityGroupIds: 
+         - !Ref IBMSecurityGroup
+      AvailabilityZone: us-east-1a
+      InstanceType: t2.micro
+      Tags: 
+      - Key: Name
+        Value: IBM-PUB-SERVER 
+
+  IBMPVTInstance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-05548f9cecf47b442"  #here, add ebs is not attached.
+      KeyName: "nvirgkeypair"
+      SubnetId: !Ref IBMPVTSubnet
+      SecurityGroupIds: 
+         - !Ref IBMSecurityGroup
+      AvailabilityZone: us-east-1b
+      InstanceType: t2.micro
+      Tags: 
+      - Key: Name
+        Value: IBM-PVT-SERVER  
+
+  TCSVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 192.168.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+       - Key: Name
+         Value: TCS-VPC
+
+  TCSInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: TCS-IGW
+
+  TCSAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+         Ref: TCSVPC
+      InternetGatewayId:
+         Ref: TCSInternetGateway 
+
+  TCSPUBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: TCSVPC
+      CidrBlock: 192.168.0.0/24
+      AvailabilityZone: "us-east-1a"
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: TCS-PUB-SUBNET 
+
+  TCSPVTSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: TCSVPC
+      CidrBlock: 192.168.1.0/24
+      AvailabilityZone: "us-east-1b"
+      Tags:
+      - Key: Name
+        Value: TCS-PVT-SUBNET        
+
+  TCSPUBRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: TCSVPC
+      Tags:
+      - Key: Name
+        Value: TCS-PUB-RT
+
+  TCSPVTRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: TCSVPC
+      Tags:
+      - Key: Name
+        Value: TCS-PVT-RT      
+
+  TCSPUBSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: TCSPUBSubnet
+      RouteTableId:
+        Ref: TCSPUBRouteTable
+
+  TCSPVTSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: TCSPVTSubnet
+      RouteTableId:
+        Ref: TCSPVTRouteTable      
+  
+  TCSRoute:
+    Type: AWS::EC2::Route
+    DependsOn: TCSAttachGateway
+    Properties:
+       RouteTableId:
+         Ref: TCSPUBRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: TCSInternetGateway
+
+  TCSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH incoming req from www to the instance/server
+      VpcId: !Ref TCSVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp           
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:                   
+      - Key: Name   
+        Value: TCS-SEC-GRP  #here egress rules are not addedd,therefore allow outbound traffic to all ports will be added by default. 
+  
+  TCSPUBInstance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-05548f9cecf47b442"
+      KeyName: "nvirgkeypair"
+      BlockDeviceMappings: 
+      - DeviceName: "/dev/sdm"
+        Ebs: 
+          VolumeType: "gp3"    #additional ebs of 9gb.
+          Iops: "3000"         #root storage will automatically be assigned that is mapped with ami.
+          DeleteOnTermination: "true"
+          VolumeSize: "9"
+      - DeviceName: "/dev/sdk"
+        NoDevice: {}
+      SubnetId: !Ref TCSPUBSubnet
+      SecurityGroupIds: 
+         - !Ref TCSSecurityGroup
+      AvailabilityZone: us-east-1a
+      InstanceType: t2.micro
+      Tags: 
+      - Key: Name
+        Value: TCS-PUB-SERVER 
+
+  TCSPVTInstance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-05548f9cecf47b442"  #here, add ebs is not attached.
+      KeyName: "nvirgkeypair"
+      SubnetId: !Ref TCSPVTSubnet
+      SecurityGroupIds: 
+         - !Ref TCSSecurityGroup
+      AvailabilityZone: us-east-1b
+      InstanceType: t2.micro
+      Tags: 
+      - Key: Name
+        Value: TCS-PVT-SERVER              
+
