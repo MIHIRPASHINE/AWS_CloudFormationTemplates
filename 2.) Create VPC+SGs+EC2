@@ -1,0 +1,159 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A sample template to create a virtual private cloud, create ssh group and pub&pvt instances.
+Resources:
+  TESTVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+       - Key: Name
+         Value: test-vpc
+
+  TESTINTERNETGATEWAY:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: test-igw
+
+  ATTACHIGW:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+         Ref: TESTVPC
+      InternetGatewayId:
+         Ref: TESTINTERNETGATEWAY
+
+  PUBLICSUBNET:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: TESTVPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: "us-east-1a"
+      MapPublicIpOnLaunch: true   #AUTOMATICALLY ASSIGN PUBLIC IP TO THE INSTANCES LAUNCHED IN THIS SUBNET
+      Tags:
+      - Key: Name
+        Value: public-subnet
+
+  PRIVATESUBNET:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: TESTVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: "us-east-1b"
+      Tags:
+      - Key: Name
+        Value: private-subnet 
+
+  PUBLICROUTETABLE:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: TESTVPC
+      Tags:
+      - Key: Name
+        Value: public-rt           
+
+  PRIVATEROUTETABLE:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: TESTVPC
+      Tags:
+      - Key: Name
+        Value: private-rt
+
+  ASSOCIATEPUBRTWITHPUBLICSUBNET:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PUBLICSUBNET
+      RouteTableId:
+        Ref: PUBLICROUTETABLE          
+
+  ASSOCIATEPVTRTWITHPRIVATESUBNET:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PRIVATESUBNET
+      RouteTableId:
+        Ref: PRIVATEROUTETABLE 
+
+  ADDROUTE:
+    Type: AWS::EC2::Route
+    DependsOn: ATTACHIGW
+    Properties:
+       RouteTableId:
+         Ref: PUBLICROUTETABLE
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: TESTINTERNETGATEWAY
+
+  SSHSECURITYGROUP:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ssh to client host
+      VpcId:  
+        Ref: TESTVPC
+      Tags: 
+      - Key: Name
+        Value: SSH-SEC-GROUP 
+      SecurityGroupIngress: #allow incoming ssh req from www i.e we would be able to connect to instance from aur local system via ssh.
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:   #allow outgoing req to all ports www i.e we would be able to download third party softwares on our instance.
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0       
+
+  TESTPUBINSTANCE: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-05548f9cecf47b442"
+      KeyName: "nvirgkeypair"
+      BlockDeviceMappings:          #By default, the block devices specified in the block device mapping for the AMI are used.
+      - DeviceName: "/dev/sdm"       #this is additional ebs attached
+        Ebs: 
+          VolumeType: "gp3"
+          Iops: "3000"
+          DeleteOnTermination: "true"
+          VolumeSize: "11"
+      - DeviceName: "/dev/sdk"
+        NoDevice: {}
+      SubnetId: !Ref PUBLICSUBNET
+      SecurityGroupIds: 
+         - !Ref SSHSECURITYGROUP
+      AvailabilityZone: us-east-1a
+      InstanceType: t2.micro   
+      Tags: 
+      - Key: Name
+        Value: MY-TEST-PUB-SERVER  
+
+  TESTPVTINSTANCE: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-05548f9cecf47b442"   #no additional ebs attached, here default ebs mapped with ami will be used.
+      KeyName: "nvirgkeypair"      
+      SubnetId: !Ref PRIVATESUBNET
+      SecurityGroupIds: 
+         - !Ref SSHSECURITYGROUP
+      AvailabilityZone: us-east-1b
+      InstanceType: t2.micro   
+      Tags: 
+      - Key: Name
+        Value: MY-TEST-PVT-SERVER             
+  
+
+
+
+
+  
+
+         
