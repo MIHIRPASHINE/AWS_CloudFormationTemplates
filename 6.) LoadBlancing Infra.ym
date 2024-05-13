@@ -1,0 +1,193 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A sample template to create infrastructure for practicing load-balancing.
+Resources:
+  IBMVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+       - Key: Name
+         Value: IBM-VPC
+
+  IBMInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: IBM-IGW
+
+  IBMAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+         Ref: IBMVPC
+      InternetGatewayId:
+         Ref: IBMInternetGateway 
+
+  IBMPUB1Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: IBMVPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: "us-east-1a"
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: IBM-PUB1-SUBNET 
+
+  IBMPUB1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: IBMVPC
+      Tags:
+      - Key: Name
+        Value: IBM-PUB1-RT      
+
+  IBMPUB1SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: IBMPUB1Subnet
+      RouteTableId:
+        Ref: IBMPUB1RouteTable
+
+  IBMPUB2Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: IBMVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: "us-east-1b"
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: IBM-PUB2-SUBNET 
+
+  IBMPUB2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: IBMVPC
+      Tags:
+      - Key: Name
+        Value: IBM-PUB2-RT      
+
+  IBMPUB2SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: IBMPUB2Subnet
+      RouteTableId:
+        Ref: IBMPUB2RouteTable      
+
+  IBMFIRSTRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IBMAttachGateway
+    Properties:
+       RouteTableId:
+         Ref: IBMPUB1RouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: IBMInternetGateway
+
+  IBMSECONDRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IBMAttachGateway
+    Properties:
+       RouteTableId:    
+         Ref: IBMPUB2RouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: IBMInternetGateway
+           
+  SSHSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow incoming ssh request from www towards instance.
+      VpcId: !Ref IBMVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0 
+      Tags: 
+      - Key: Name
+        Value: SSH-SEC-GRP  
+
+  HTTPSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Allow incoming HTTP request traffic towards instance.
+        VpcId: !Ref IBMVPC
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            CidrIp: 0.0.0.0/0
+        SecurityGroupEgress:
+          - IpProtocol: -1
+            FromPort: -1
+            ToPort: -1
+            CidrIp: 0.0.0.0/0   
+        Tags: 
+        - Key: Name
+          Value: MY-HTTP-SECGRP 
+
+  FIRSTPUBInstance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-0c0b74d29acd0cd97"
+      KeyName: "nvirgkeypair"
+      SubnetId: !Ref IBMPUB1Subnet
+      SecurityGroupIds: 
+         - !Ref SSHSecurityGroup
+         - !Ref HTTPSecurityGroup
+      AvailabilityZone: us-east-1a
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo yum -y install httpd
+          sudo yum -y install git
+          sudo systemctl start httpd
+          sudo systemctl enable httpd
+          sudo git clone https://github.com/Akiranred/ecomm.git /var/www/html
+      InstanceType: t2.micro
+      Tags: 
+      - Key: Name
+        Value: APP-SERVER-1  
+
+  SECONDPUBInstance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: "ami-0c0b74d29acd0cd97"
+      KeyName: "nvirgkeypair"
+      SubnetId: !Ref IBMPUB2Subnet
+      SecurityGroupIds: 
+         - !Ref SSHSecurityGroup
+         - !Ref HTTPSecurityGroup
+      AvailabilityZone: us-east-1b
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo yum -y install httpd
+          sudo yum -y install git
+          sudo systemctl start httpd
+          sudo systemctl enable httpd
+          sudo git clone https://github.com/Akiranred/food.git /var/www/html
+      InstanceType: t2.micro
+      Tags: 
+      - Key: Name
+        Value: APP-SERVER-2          
+
+  
+  
+  
